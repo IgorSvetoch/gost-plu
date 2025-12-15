@@ -129,6 +129,26 @@ f(word32 x)
                T3[(unsigned char)(x >> 24)];
 }
 
+#define GOST_ROUND_PAIR(n1_a, n2_a, n1_b, n2_b, key_a, key_b) \
+        do { \
+                (n2_a) ^= f((n1_a) + (key_a)); \
+                (n2_b) ^= f((n1_b) + (key_a)); \
+                (n1_a) ^= f((n2_a) + (key_b)); \
+                (n1_b) ^= f((n2_b) + (key_b)); \
+        } while (0)
+
+#define GOST_ROUND_QUAD(n1_a, n2_a, n1_b, n2_b, n1_c, n2_c, n1_d, n2_d, key_a, key_b) \
+        do { \
+                (n2_a) ^= f((n1_a) + (key_a)); \
+                (n2_b) ^= f((n1_b) + (key_a)); \
+                (n2_c) ^= f((n1_c) + (key_a)); \
+                (n2_d) ^= f((n1_d) + (key_a)); \
+                (n1_a) ^= f((n2_a) + (key_b)); \
+                (n1_b) ^= f((n2_b) + (key_b)); \
+                (n1_c) ^= f((n2_c) + (key_b)); \
+                (n1_d) ^= f((n2_d) + (key_b)); \
+        } while (0)
+
 /*
  * The GOST standard defines the input in terms of bits 1..64, with
  * bit 1 being the lsb of in[0] and bit 64 being the msb of in[1].
@@ -138,7 +158,7 @@ f(word32 x)
 void
 gostcrypt(word32 const in[2], word32 out[2], word32 const key[8])
 {
-	register word32 n1, n2; /* As named in the GOST */
+        register word32 n1, n2; /* As named in the GOST */
 
 	n1 = in[0];
 	n2 = in[1];
@@ -180,9 +200,85 @@ gostcrypt(word32 const in[2], word32 out[2], word32 const key[8])
 	n2 ^= f(n1+key[1]);
 	n1 ^= f(n2+key[0]);
 
-	/* There is no swap after the last round */
-	out[0] = n2;
-	out[1] = n1;
+        /* There is no swap after the last round */
+        out[0] = n2;
+        out[1] = n1;
+}
+
+void
+gostcrypt2(word32 const in[4], word32 out[4], word32 const key[8])
+{
+        register word32 n1_0 = in[0];
+        register word32 n2_0 = in[1];
+        register word32 n1_1 = in[2];
+        register word32 n2_1 = in[3];
+
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[0], key[1]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[2], key[3]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[4], key[5]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[6], key[7]);
+
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[0], key[1]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[2], key[3]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[4], key[5]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[6], key[7]);
+
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[0], key[1]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[2], key[3]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[4], key[5]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[6], key[7]);
+
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[7], key[6]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[5], key[4]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[3], key[2]);
+        GOST_ROUND_PAIR(n1_0, n2_0, n1_1, n2_1, key[1], key[0]);
+
+        out[0] = n2_0;
+        out[1] = n1_0;
+        out[2] = n2_1;
+        out[3] = n1_1;
+}
+
+void
+gostcrypt4(word32 const in[8], word32 out[8], word32 const key[8])
+{
+        register word32 n1_0 = in[0];
+        register word32 n2_0 = in[1];
+        register word32 n1_1 = in[2];
+        register word32 n2_1 = in[3];
+        register word32 n1_2 = in[4];
+        register word32 n2_2 = in[5];
+        register word32 n1_3 = in[6];
+        register word32 n2_3 = in[7];
+
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[0], key[1]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[2], key[3]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[4], key[5]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[6], key[7]);
+
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[0], key[1]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[2], key[3]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[4], key[5]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[6], key[7]);
+
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[0], key[1]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[2], key[3]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[4], key[5]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[6], key[7]);
+
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[7], key[6]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[5], key[4]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[3], key[2]);
+        GOST_ROUND_QUAD(n1_0, n2_0, n1_1, n2_1, n1_2, n2_2, n1_3, n2_3, key[1], key[0]);
+
+        out[0] = n2_0;
+        out[1] = n1_0;
+        out[2] = n2_1;
+        out[3] = n1_1;
+        out[4] = n2_2;
+        out[5] = n1_2;
+        out[6] = n2_3;
+        out[7] = n1_3;
 }
 	
 
