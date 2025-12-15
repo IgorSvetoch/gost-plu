@@ -71,6 +71,15 @@ static unsigned char k87[256];
 static unsigned char k65[256];
 static unsigned char k43[256];
 static unsigned char k21[256];
+static word32 T0[256];
+static word32 T1[256];
+static word32 T2[256];
+static word32 T3[256];
+
+static inline word32 rotl32(word32 x, unsigned n)
+{
+        return (x << n) | (x >> (32 - n));
+}
 
 /*
  * Build byte-at-a-time subtitution tables.
@@ -79,21 +88,32 @@ static unsigned char k21[256];
 void
 kboxinit(void)
 {
-	int i;
-	for (i = 0; i < 256; i++) {
-		k87[i] = k8[i >> 4] << 4 | k7[i & 15];
-		k65[i] = k6[i >> 4] << 4 | k5[i & 15];
-		k43[i] = k4[i >> 4] << 4 | k3[i & 15];
-		k21[i] = k2[i >> 4] << 4 | k1[i & 15];
-	}
+        int i;
+        for (i = 0; i < 256; i++) {
+                k87[i] = k8[i >> 4] << 4 | k7[i & 15];
+                k65[i] = k6[i >> 4] << 4 | k5[i & 15];
+                k43[i] = k4[i >> 4] << 4 | k3[i & 15];
+                k21[i] = k2[i >> 4] << 4 | k1[i & 15];
+
+                {
+                        word32 b0 = k21[i];
+                        word32 b1 = k43[i];
+                        word32 b2 = k65[i];
+                        word32 b3 = k87[i];
+
+                        T0[i] = rotl32(b0, 11);
+                        T1[i] = rotl32(b1 << 8, 11);
+                        T2[i] = rotl32(b2 << 16, 11);
+                        T3[i] = rotl32(b3 << 24, 11);
+                }
+        }
 }
 
 /*
  * Do the substitution and rotation that are the core of the operation,
  * like the expansion, substitution and permutation of the DES.
- * It would be possible to perform DES-like optimisations and store
- * the table entries as 32-bit words, already rotated, but the
- * efficiency gain is questionable.
+ * We precompute 32-bit tables with the S-box output already rotated
+ * into place to minimise shifts and bitwise OR operations at runtime.
  *
  * This should be inlined for maximum speed
  */
@@ -103,21 +123,10 @@ __inline__
 static word32
 f(word32 x)
 {
-	/* Do substitutions */
-#if 0
-	/* This is annoyingly slow */
-	x = k8[x>>28 & 15] << 28 | k7[x>>24 & 15] << 24 |
-	    k6[x>>20 & 15] << 20 | k5[x>>16 & 15] << 16 |
-	    k4[x>>12 & 15] << 12 | k3[x>> 8 & 15] <<  8 |
-	    k2[x>> 4 & 15] <<  4 | k1[x     & 15];
-#else
-	/* This is faster */
-	x = k87[x>>24 & 255] << 24 | k65[x>>16 & 255] << 16 |
-	    k43[x>> 8 & 255] <<  8 | k21[x & 255];
-#endif
-
-	/* Rotate left 11 bits */
-	return x<<11 | x>>(32-11);
+        return T0[(unsigned char)(x      )] ^
+               T1[(unsigned char)(x >>  8)] ^
+               T2[(unsigned char)(x >> 16)] ^
+               T3[(unsigned char)(x >> 24)];
 }
 
 /*
