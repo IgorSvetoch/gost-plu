@@ -46,10 +46,21 @@ static void run_benchmark(size_t blocks_per_batch, size_t iterations)
         }
 
         for (size_t iter = 0; iter < iterations; iter++) {
-                for (size_t i = 0; i < blocks_per_batch; i++) {
-                    gostcrypt(&buffer[i * 2], block, key);
-                    buffer[i * 2] = block[0];
-                    buffer[i * 2 + 1] = block[1];
+                size_t i = 0;
+                for (; i + 4 <= blocks_per_batch; i += 4) {
+                        word32 out[8];
+                        gostcrypt4(&buffer[i * 2], out, key);
+                        memcpy(&buffer[i * 2], out, sizeof(out));
+                }
+                for (; i + 2 <= blocks_per_batch; i += 2) {
+                        word32 out[4];
+                        gostcrypt2(&buffer[i * 2], out, key);
+                        memcpy(&buffer[i * 2], out, sizeof(out));
+                }
+                for (; i < blocks_per_batch; i++) {
+                        gostcrypt(&buffer[i * 2], block, key);
+                        buffer[i * 2] = block[0];
+                        buffer[i * 2 + 1] = block[1];
                 }
         }
 

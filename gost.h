@@ -12,6 +12,8 @@ typedef unsigned long word32;
 
 void kboxinit(void);
 void gostcrypt(word32 const in[2], word32 out[2], word32 const key[8]);
+void gostcrypt2(word32 const in[4], word32 out[4], word32 const key[8]);
+void gostcrypt4(word32 const in[8], word32 out[8], word32 const key[8]);
 void gostdecrypt(word32 const in[2], word32 out[2], word32 const key[8]);
 void gostofb(word32 const *in, word32 *out, int len,
             word32 const iv[2], word32 const key[8]);
