@@ -32,12 +32,7 @@
  */
 
 
-/* A 32-bit data type */
-#ifdef __alpha  /* Any other 64-bit machines? */
-typedef unsigned int word32;
-#else
-typedef unsigned long word32;
-#endif
+#include "gost.h"
 
 /*
  * The standard does not specify the contents of the 8 4 bit->4 bit
