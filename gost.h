@@ -20,6 +20,7 @@ void gostofb(word32 const *in, word32 *out, int len,
 #if defined(__ARM_NEON)
 void gostofb_neon(word32 const *in, word32 *out, int len,
                  word32 const iv[2], word32 const key[8]);
+void gostcrypt4_anf_neon(word32 const in[8], word32 out[8], word32 const key[8]);
 #endif
 void gostcfbencrypt(word32 const *in, word32 *out, int len,
                    word32 iv[2], word32 const key[8]);

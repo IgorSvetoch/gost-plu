@@ -80,6 +80,18 @@ static word32 T0[256];
 static word32 T1[256];
 static word32 T2[256];
 static word32 T3[256];
+#if defined(__ARM_NEON)
+static uint16_t const sbox_anf[8][4] = {
+        {0x091f, 0x013a, 0x1f27, 0x4e53},
+        {0x11da, 0x091e, 0x1507, 0x5492},
+        {0x54d2, 0x3824, 0x05b7, 0x11cb},
+        {0x26b8, 0x6bef, 0x0416, 0x0dca},
+        {0x1a1d, 0x419b, 0x5139, 0x3a26},
+        {0x012c, 0x5fe7, 0x7638, 0x6d7b},
+        {0x2835, 0x01e7, 0x1507, 0x1c1b},
+        {0x0b24, 0x766f, 0x0d39, 0x51d3},
+};
+#endif
 
 static inline word32 rotl32(word32 x, unsigned n)
 {
@@ -133,6 +145,115 @@ f(word32 x)
                T2[(unsigned char)(x >> 16)] ^
                T3[(unsigned char)(x >> 24)];
 }
+
+#if defined(__ARM_NEON)
+static inline uint32x4_t
+vxor_u32(uint32x4_t a, uint32x4_t b)
+{
+        return veorq_u32(a, b);
+}
+
+static inline uint32x4_t
+vand_u32(uint32x4_t a, uint32x4_t b)
+{
+        return vandq_u32(a, b);
+}
+
+static inline uint32x4_t
+vrotl32_u32(uint32x4_t x, int n)
+{
+        return vorrq_u32(vshlq_n_u32(x, n), vshrq_n_u32(x, 32 - n));
+}
+
+static inline void
+sbox4_anf_u32x4(uint32x4_t a0, uint32x4_t a1, uint32x4_t a2, uint32x4_t a3,
+               uint16_t const c[4], uint32x4_t *y0, uint32x4_t *y1,
+               uint32x4_t *y2, uint32x4_t *y3)
+{
+        uint32x4_t const one = vdupq_n_u32(1);
+        uint32x4_t m0 = one;
+        uint32x4_t m1 = a0;
+        uint32x4_t m2 = a1;
+        uint32x4_t m3 = vand_u32(a0, a1);
+        uint32x4_t m4 = a2;
+        uint32x4_t m5 = vand_u32(a0, a2);
+        uint32x4_t m6 = vand_u32(a1, a2);
+        uint32x4_t m7 = vand_u32(m3, a2);
+        uint32x4_t m8 = a3;
+        uint32x4_t m9 = vand_u32(a0, a3);
+        uint32x4_t m10 = vand_u32(a1, a3);
+        uint32x4_t m11 = vand_u32(m3, a3);
+        uint32x4_t m12 = vand_u32(a2, a3);
+        uint32x4_t m13 = vand_u32(m5, a3);
+        uint32x4_t m14 = vand_u32(m6, a3);
+        uint32x4_t m15 = vand_u32(m7, a3);
+
+        uint32x4_t const monomials[16] = {
+                m0, m1, m2, m3, m4, m5, m6, m7,
+                m8, m9, m10, m11, m12, m13, m14, m15,
+        };
+
+        uint32x4_t out0 = vdupq_n_u32(0);
+        uint32x4_t out1 = vdupq_n_u32(0);
+        uint32x4_t out2 = vdupq_n_u32(0);
+        uint32x4_t out3 = vdupq_n_u32(0);
+
+        for (int ob = 0; ob < 4; ++ob) {
+                uint16_t mask = c[ob];
+                uint32x4_t acc = vdupq_n_u32(0);
+                for (int t = 0; t < 16; ++t) {
+                        if (mask & (1u << t))
+                                acc = vxor_u32(acc, monomials[t]);
+                }
+
+                switch (ob) {
+                case 0:
+                        out0 = acc;
+                        break;
+                case 1:
+                        out1 = acc;
+                        break;
+                case 2:
+                        out2 = acc;
+                        break;
+                default:
+                        out3 = acc;
+                        break;
+                }
+        }
+
+        *y0 = out0;
+        *y1 = out1;
+        *y2 = out2;
+        *y3 = out3;
+}
+
+static inline uint32x4_t
+f_anf4(uint32x4_t x)
+{
+        uint32x4_t const one = vdupq_n_u32(1);
+        uint32x4_t r = vdupq_n_u32(0);
+
+        for (int p = 0; p < 8; ++p) {
+                int base = 4 * p;
+                uint32x4_t a0 = vand_u32(vshrq_n_u32(x, base + 0), one);
+                uint32x4_t a1 = vand_u32(vshrq_n_u32(x, base + 1), one);
+                uint32x4_t a2 = vand_u32(vshrq_n_u32(x, base + 2), one);
+                uint32x4_t a3 = vand_u32(vshrq_n_u32(x, base + 3), one);
+
+                uint32x4_t y0, y1, y2, y3;
+                sbox4_anf_u32x4(a0, a1, a2, a3, sbox_anf[p], &y0, &y1, &y2,
+                                &y3);
+
+                uint32x4_t ny = vxor_u32(vxor_u32(y0, vshlq_n_u32(y1, 1)),
+                                          vxor_u32(vshlq_n_u32(y2, 2),
+                                                   vshlq_n_u32(y3, 3)));
+                r = vxor_u32(r, vshlq_n_u32(ny, base));
+        }
+
+        return vrotl32_u32(r, 11);
+}
+#endif
 
 #define GOST_ROUND_PAIR(n1_a, n2_a, n1_b, n2_b, key_a, key_b) \
         do { \
@@ -285,6 +406,35 @@ gostcrypt4(word32 const in[8], word32 out[8], word32 const key[8])
         out[6] = n2_3;
         out[7] = n1_3;
 }
+
+#if defined(__ARM_NEON)
+void
+gostcrypt4_anf_neon(word32 const in[8], word32 out[8], word32 const key[8])
+{
+        uint32x4_t n1 = vld1q_u32((uint32_t const *)in);
+        uint32x4_t n2 = vld1q_u32((uint32_t const *)(in + 4));
+
+        for (int i = 0; i < 24; ++i) {
+                uint32x4_t k = vdupq_n_u32((uint32_t)key[i & 7]);
+                uint32x4_t t = vaddq_u32(n1, k);
+                t = f_anf4(t);
+                t = veorq_u32(t, n2);
+                n2 = n1;
+                n1 = t;
+        }
+        for (int i = 7; i >= 0; --i) {
+                uint32x4_t k = vdupq_n_u32((uint32_t)key[i]);
+                uint32x4_t t = vaddq_u32(n1, k);
+                t = f_anf4(t);
+                t = veorq_u32(t, n2);
+                n2 = n1;
+                n1 = t;
+        }
+
+        vst1q_u32((uint32_t *)out, n2);
+        vst1q_u32((uint32_t *)(out + 4), n1);
+}
+#endif
 	
 
 /*
