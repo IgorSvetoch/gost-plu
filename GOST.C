@@ -160,9 +160,21 @@ return vandq_u32(a, b);
 }
 
 static inline uint32x4_t
+vshr_u32(uint32x4_t x, int n)
+{
+        return vshlq_u32(x, vdupq_n_s32(-n));
+}
+
+static inline uint32x4_t
+vshl_u32(uint32x4_t x, int n)
+{
+        return vshlq_u32(x, vdupq_n_s32(n));
+}
+
+static inline uint32x4_t
 vrotl32_u32(uint32x4_t x, int n)
 {
-        return vorrq_u32(vshlq_n_u32(x, n), vshrq_n_u32(x, 32 - n));
+        return vorrq_u32(vshl_u32(x, n), vshr_u32(x, 32 - n));
 }
 
 static inline void
@@ -236,19 +248,19 @@ f_anf4(uint32x4_t x)
 
 for (int p = 0; p < 8; ++p) {
 int base = 4 * p;
-uint32x4_t a0 = vandq_u32_safe(vshrq_n_u32(x, base + 0), one);
-uint32x4_t a1 = vandq_u32_safe(vshrq_n_u32(x, base + 1), one);
-uint32x4_t a2 = vandq_u32_safe(vshrq_n_u32(x, base + 2), one);
-uint32x4_t a3 = vandq_u32_safe(vshrq_n_u32(x, base + 3), one);
+uint32x4_t a0 = vandq_u32_safe(vshr_u32(x, base + 0), one);
+uint32x4_t a1 = vandq_u32_safe(vshr_u32(x, base + 1), one);
+uint32x4_t a2 = vandq_u32_safe(vshr_u32(x, base + 2), one);
+uint32x4_t a3 = vandq_u32_safe(vshr_u32(x, base + 3), one);
 
                 uint32x4_t y0, y1, y2, y3;
                 sbox4_anf_u32x4(a0, a1, a2, a3, sbox_anf[p], &y0, &y1, &y2,
                                 &y3);
 
-                uint32x4_t ny = vxor_u32(vxor_u32(y0, vshlq_n_u32(y1, 1)),
-                                          vxor_u32(vshlq_n_u32(y2, 2),
-                                                   vshlq_n_u32(y3, 3)));
-                r = vxor_u32(r, vshlq_n_u32(ny, base));
+                uint32x4_t ny =
+                    vxor_u32(vxor_u32(y0, vshl_u32(y1, 1)),
+                             vxor_u32(vshl_u32(y2, 2), vshl_u32(y3, 3)));
+                r = vxor_u32(r, vshl_u32(ny, base));
         }
 
         return vrotl32_u32(r, 11);
@@ -610,23 +622,25 @@ gostofb_neon(word32 const *in, word32 *out, int len,
 
 void
 gostcfbencrypt(word32 const *in, word32 *out, int len,
-	       word32 iv[2], word32 const key[8])
+               word32 iv[2], word32 const key[8])
 {
-	while (len--) {
-		gostcrypt(iv, iv, key);
-		iv[0] = *out++ ^= iv[0];
-		iv[1] = *out++ ^= iv[1];
-	}
+        (void)in;
+        while (len--) {
+                gostcrypt(iv, iv, key);
+                iv[0] = *out++ ^= iv[0];
+                iv[1] = *out++ ^= iv[1];
+        }
 }
 
 void
 gostcfbdecrypt(word32 const *in, word32 *out, int len,
-	       word32 iv[2], word32 const key[8])
+               word32 iv[2], word32 const key[8])
 {
-	word32 t;
-	while (len--) {
-		gostcrypt(iv, iv, key);
-		t = *out;
+        (void)in;
+        word32 t;
+        while (len--) {
+                gostcrypt(iv, iv, key);
+                t = *out;
 		*out++ ^= iv[0];
 		iv[0] = t;
 		t = *out;
