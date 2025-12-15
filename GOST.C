@@ -34,6 +34,11 @@
 
 #include "gost.h"
 
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#include <stdint.h>
+#endif
+
 /*
  * The standard does not specify the contents of the 8 4 bit->4 bit
  * substitution boxes, saying they're a parameter of the network
@@ -364,9 +369,9 @@ gostdecrypt(word32 const in[2], word32 out[2], word32 const key[8])
 
 void
 gostofb(word32 const *in, word32 *out, int len,
-	word32 const iv[2], word32 const key[8])
+        word32 const iv[2], word32 const key[8])
 {
-	word32 temp[2];         /* Counter */
+        word32 temp[2];         /* Counter */
 	word32 gamma[2];        /* Output XOR value */
 
 	/* Compute starting value for counter */
@@ -382,10 +387,66 @@ gostofb(word32 const *in, word32 *out, int len,
 
 		gostcrypt(temp, gamma, key);
 
-		*out++ = *in++ ^ gamma[0];
-		*out++ = *in++ ^ gamma[1];
-	}
+                *out++ = *in++ ^ gamma[0];
+                *out++ = *in++ ^ gamma[1];
+        }
 }
+
+#if defined(__ARM_NEON)
+void
+gostofb_neon(word32 const *in, word32 *out, int len,
+            word32 const iv[2], word32 const key[8])
+{
+        word32 temp[2];         /* Counter */
+        word32 gamma[8];        /* Four output blocks */
+
+        /* Compute starting value for counter */
+        gostcrypt(iv, temp, key);
+
+        while (len >= 4) {
+                for (int i = 0; i < 4; ++i) {
+                        temp[0] += C2;
+                        if (temp[0] < C2)
+                                temp[0]++;
+                        temp[1] += C1;
+                        if (temp[1] < C1)
+                                temp[1]++;
+
+                        gostcrypt(temp, &gamma[2 * i], key);
+                }
+
+                uint32x4_t in0 = vld1q_u32((uint32_t const *)in);
+                uint32x4_t in1 = vld1q_u32((uint32_t const *)(in + 4));
+
+                uint32x4_t g0 = vld1q_u32((uint32_t const *)gamma);
+                uint32x4_t g1 = vld1q_u32((uint32_t const *)(gamma + 4));
+
+                uint32x4_t out0 = veorq_u32(in0, g0);
+                uint32x4_t out1 = veorq_u32(in1, g1);
+
+                vst1q_u32((uint32_t *)out, out0);
+                vst1q_u32((uint32_t *)(out + 4), out1);
+
+                in += 8;
+                out += 8;
+                len -= 4;
+        }
+
+        while (len--) {
+                temp[0] += C2;
+                if (temp[0] < C2)
+                        temp[0]++;
+                temp[1] += C1;
+                if (temp[1] < C1)
+                        temp[1]++;
+
+                gostcrypt(temp, gamma, key);
+
+                *out++ = *in++ ^ gamma[0];
+                *out++ = *in++ ^ gamma[1];
+        }
+}
+#endif
 
 /*
  * The CFB mode is just what you'd expect.  Each block of ciphertext y[] is

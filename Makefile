@@ -21,4 +21,8 @@ test: all
 clean:
 	rm -f $(target) *.o
 
-.PHONY: all clean format test
+# Build optimized for Cortex-A9 with NEON enabled
+cortex-a9-neon: CFLAGS += -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
+cortex-a9-neon: $(target)
+
+.PHONY: all clean format test cortex-a9-neon
