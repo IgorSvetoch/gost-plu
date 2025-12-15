@@ -32,12 +32,7 @@
  */
 
 
-/* A 32-bit data type */
-#ifdef __alpha  /* Any other 64-bit machines? */
-typedef unsigned int word32;
-#else
-typedef unsigned long word32;
-#endif
+#include "gost.h"
 
 /*
  * The standard does not specify the contents of the 8 4 bit->4 bit
@@ -84,13 +79,20 @@ static unsigned char k21[256];
 void
 kboxinit(void)
 {
-	int i;
-	for (i = 0; i < 256; i++) {
-		k87[i] = k8[i >> 4] << 4 | k7[i & 15];
-		k65[i] = k6[i >> 4] << 4 | k5[i & 15];
-		k43[i] = k4[i >> 4] << 4 | k3[i & 15];
-		k21[i] = k2[i >> 4] << 4 | k1[i & 15];
-	}
+        static int initialized;
+        int i;
+
+        if (initialized)
+                return;
+
+        for (i = 0; i < 256; i++) {
+                k87[i] = k8[i >> 4] << 4 | k7[i & 15];
+                k65[i] = k6[i >> 4] << 4 | k5[i & 15];
+                k43[i] = k4[i >> 4] << 4 | k3[i & 15];
+                k21[i] = k2[i >> 4] << 4 | k1[i & 15];
+        }
+
+        initialized = 1;
 }
 
 /*
@@ -108,7 +110,7 @@ __inline__
 static word32
 f(word32 x)
 {
-	/* Do substitutions */
+        /* Do substitutions */
 #if 0
 	/* This is annoyingly slow */
 	x = k8[x>>28 & 15] << 28 | k7[x>>24 & 15] << 24 |
@@ -131,54 +133,48 @@ f(word32 x)
  *
  * The keys are defined similarly, with bit 256 being the msb of key[7].
  */
-void
-gostcrypt(word32 const in[2], word32 out[2], word32 const key[8])
+static void
+build_round_keys(word32 const key[8], word32 sched[32])
 {
-	register word32 n1, n2; /* As named in the GOST */
+        int i;
 
-	n1 = in[0];
-	n2 = in[1];
+        for (i = 0; i < 24; i++)
+                sched[i] = key[i & 7];
+        for (i = 24; i < 32; i++)
+                sched[i] = key[7 - (i - 24)];
+}
 
-	/* Instead of swapping halves, swap names each round */
-	n2 ^= f(n1+key[0]);
-	n1 ^= f(n2+key[1]);
-	n2 ^= f(n1+key[2]);
-	n1 ^= f(n2+key[3]);
-	n2 ^= f(n1+key[4]);
-	n1 ^= f(n2+key[5]);
-	n2 ^= f(n1+key[6]);
-	n1 ^= f(n2+key[7]);
+static void
+gost_process_rounds(word32 const in[2], word32 out[2], word32 const sched[32])
+{
+        word32 n1 = in[0];
+        word32 n2 = in[1];
 
-	n2 ^= f(n1+key[0]);
-	n1 ^= f(n2+key[1]);
-	n2 ^= f(n1+key[2]);
-	n1 ^= f(n2+key[3]);
-	n2 ^= f(n1+key[4]);
-	n1 ^= f(n2+key[5]);
-	n2 ^= f(n1+key[6]);
-	n1 ^= f(n2+key[7]);
+        for (int i = 0; i < 32; i++) {
+                n2 ^= f(n1 + sched[i]);
+                if (i != 31) {
+                        word32 t = n1;
+                        n1 = n2;
+                        n2 = t;
+                }
+        }
 
-	n2 ^= f(n1+key[0]);
-	n1 ^= f(n2+key[1]);
-	n2 ^= f(n1+key[2]);
-	n1 ^= f(n2+key[3]);
-	n2 ^= f(n1+key[4]);
-	n1 ^= f(n2+key[5]);
-	n2 ^= f(n1+key[6]);
-	n1 ^= f(n2+key[7]);
+        out[0] = n2;
+        out[1] = n1;
+}
 
-	n2 ^= f(n1+key[7]);
-	n1 ^= f(n2+key[6]);
-	n2 ^= f(n1+key[5]);
-	n1 ^= f(n2+key[4]);
-	n2 ^= f(n1+key[3]);
-	n1 ^= f(n2+key[2]);
-	n2 ^= f(n1+key[1]);
-	n1 ^= f(n2+key[0]);
+void
+gost_init(gost_ctx *ctx, word32 const key[8])
+{
+        build_round_keys(key, ctx->enc_key);
+        for (int i = 0; i < 32; i++)
+                ctx->dec_key[i] = ctx->enc_key[31 - i];
+}
 
-	/* There is no swap after the last round */
-	out[0] = n2;
-	out[1] = n1;
+void
+gost_encrypt_block(gost_ctx const *ctx, word32 const in[2], word32 out[2])
+{
+        gost_process_rounds(in, out, ctx->enc_key);
 }
 	
 
@@ -189,51 +185,9 @@ gostcrypt(word32 const in[2], word32 out[2], word32 const key[8])
  * as done here.
  */
 void
-gostdecrypt(word32 const in[2], word32 out[2], word32 const key[8])
+gost_decrypt_block(gost_ctx const *ctx, word32 const in[2], word32 out[2])
 {
-	register word32 n1, n2; /* As named in the GOST */
-
-	n1 = in[0];
-	n2 = in[1];
-
-	n2 ^= f(n1+key[0]);
-	n1 ^= f(n2+key[1]);
-	n2 ^= f(n1+key[2]);
-	n1 ^= f(n2+key[3]);
-	n2 ^= f(n1+key[4]);
-	n1 ^= f(n2+key[5]);
-	n2 ^= f(n1+key[6]);
-	n1 ^= f(n2+key[7]);
-
-	n2 ^= f(n1+key[7]);
-	n1 ^= f(n2+key[6]);
-	n2 ^= f(n1+key[5]);
-	n1 ^= f(n2+key[4]);
-	n2 ^= f(n1+key[3]);
-	n1 ^= f(n2+key[2]);
-	n2 ^= f(n1+key[1]);
-	n1 ^= f(n2+key[0]);
-
-	n2 ^= f(n1+key[7]);
-	n1 ^= f(n2+key[6]);
-	n2 ^= f(n1+key[5]);
-	n1 ^= f(n2+key[4]);
-	n2 ^= f(n1+key[3]);
-	n1 ^= f(n2+key[2]);
-	n2 ^= f(n1+key[1]);
-	n1 ^= f(n2+key[0]);
-
-	n2 ^= f(n1+key[7]);
-	n1 ^= f(n2+key[6]);
-	n2 ^= f(n1+key[5]);
-	n1 ^= f(n2+key[4]);
-	n2 ^= f(n1+key[3]);
-	n1 ^= f(n2+key[2]);
-	n2 ^= f(n1+key[1]);
-	n1 ^= f(n2+key[0]);
-
-	out[0] = n2;
-	out[1] = n1;
+        gost_process_rounds(in, out, ctx->dec_key);
 }
 
 /*
@@ -263,14 +217,35 @@ gostdecrypt(word32 const in[2], word32 out[2], word32 const key[8])
 #define C2 0x01010101
 
 void
-gostofb(word32 const *in, word32 *out, int len,
-	word32 const iv[2], word32 const key[8])
+gostcrypt(word32 const in[2], word32 out[2], word32 const key[8])
 {
-	word32 temp[2];         /* Counter */
-	word32 gamma[2];        /* Output XOR value */
+        gost_ctx ctx;
 
-	/* Compute starting value for counter */
-	gostcrypt(iv, temp, key);
+        gost_init(&ctx, key);
+        gost_encrypt_block(&ctx, in, out);
+}
+
+void
+gostdecrypt(word32 const in[2], word32 out[2], word32 const key[8])
+{
+        gost_ctx ctx;
+
+        gost_init(&ctx, key);
+        gost_decrypt_block(&ctx, in, out);
+}
+
+void
+gostofb(word32 const *in, word32 *out, int len,
+        word32 const iv[2], word32 const key[8])
+{
+        gost_ctx ctx;
+        word32 temp[2];         /* Counter */
+        word32 gamma[2];        /* Output XOR value */
+
+        gost_init(&ctx, key);
+
+        /* Compute starting value for counter */
+        gost_encrypt_block(&ctx, iv, temp);
 
 	while (len--) {
 		temp[0] += C2;
@@ -280,11 +255,11 @@ gostofb(word32 const *in, word32 *out, int len,
 		if (temp[1] < C1)       /* Wrap modulo 2^32? */
 			temp[1]++;      /* Make it modulo 2^32-1 */
 
-		gostcrypt(temp, gamma, key);
+                gost_encrypt_block(&ctx, temp, gamma);
 
-		*out++ = *in++ ^ gamma[0];
-		*out++ = *in++ ^ gamma[1];
-	}
+                *out++ = *in++ ^ gamma[0];
+                *out++ = *in++ ^ gamma[1];
+        }
 }
 
 /*
@@ -299,29 +274,42 @@ gostofb(word32 const *in, word32 *out, int len,
 
 void
 gostcfbencrypt(word32 const *in, word32 *out, int len,
-	       word32 iv[2], word32 const key[8])
+               word32 iv[2], word32 const key[8])
 {
-	while (len--) {
-		gostcrypt(iv, iv, key);
-		iv[0] = *out++ ^= iv[0];
-		iv[1] = *out++ ^= iv[1];
-	}
+        gost_ctx ctx;
+
+        gost_init(&ctx, key);
+
+        while (len--) {
+                word32 stream[2];
+
+                gost_encrypt_block(&ctx, iv, stream);
+                iv[0] = *out++ = *in++ ^ stream[0];
+                iv[1] = *out++ = *in++ ^ stream[1];
+        }
 }
 
 void
 gostcfbdecrypt(word32 const *in, word32 *out, int len,
-	       word32 iv[2], word32 const key[8])
+               word32 iv[2], word32 const key[8])
 {
-	word32 t;
-	while (len--) {
-		gostcrypt(iv, iv, key);
-		t = *out;
-		*out++ ^= iv[0];
-		iv[0] = t;
-		t = *out;
-		*out++ ^= iv[1];
-		iv[1] = t;
-	}
+        gost_ctx ctx;
+
+        gost_init(&ctx, key);
+
+        while (len--) {
+                word32 stream[2];
+                word32 cipher0, cipher1;
+
+                cipher0 = *in++;
+                cipher1 = *in++;
+
+                gost_encrypt_block(&ctx, iv, stream);
+                *out++ = cipher0 ^ stream[0];
+                *out++ = cipher1 ^ stream[1];
+                iv[0] = cipher0;
+                iv[1] = cipher1;
+        }
 }
 
 
@@ -334,37 +322,30 @@ gostcfbdecrypt(word32 const *in, word32 *out, int len,
 void
 gostmac(word32 const *in, int len, word32 out[2], word32 const key[8])
 {
-	register word32 n1, n2; /* As named in the GOST */
+        gost_ctx ctx;
+        word32 n1, n2; /* As named in the GOST */
 
-	n1 = 0;
-	n2 = 0;
+        gost_init(&ctx, key);
 
-	while (len--) {
-		n1 ^= *in++;
-		n2 = *in++;
+        n1 = 0;
+        n2 = 0;
 
-		/* Instead of swapping halves, swap names each round */
-		n2 ^= f(n1+key[0]);
-		n1 ^= f(n2+key[1]);
-		n2 ^= f(n1+key[2]);
-		n1 ^= f(n2+key[3]);
-		n2 ^= f(n1+key[4]);
-		n1 ^= f(n2+key[5]);
-		n2 ^= f(n1+key[6]);
-		n1 ^= f(n2+key[7]);
+        while (len--) {
+                n1 ^= *in++;
+                n2 = *in++;
 
-		n2 ^= f(n1+key[0]);
-		n1 ^= f(n2+key[1]);
-		n2 ^= f(n1+key[2]);
-		n1 ^= f(n2+key[3]);
-		n2 ^= f(n1+key[4]);
-		n1 ^= f(n2+key[5]);
-		n2 ^= f(n1+key[6]);
-		n1 ^= f(n2+key[7]);
-	}
+                for (int i = 0; i < 16; i++) {
+                        n2 ^= f(n1 + ctx.enc_key[i]);
+                        if (i != 15) {
+                                word32 t = n1;
+                                n1 = n2;
+                                n2 = t;
+                        }
+                }
+        }
 
-	out[0] = n1;
-	out[1] = n2;
+        out[0] = n1;
+        out[1] = n2;
 }
 
 #ifdef TEST
