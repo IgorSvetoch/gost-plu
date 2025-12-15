@@ -150,13 +150,13 @@ f(word32 x)
 static inline uint32x4_t
 vxor_u32(uint32x4_t a, uint32x4_t b)
 {
-        return veorq_u32(a, b);
+return veorq_u32(a, b);
 }
 
 static inline uint32x4_t
-vand_u32(uint32x4_t a, uint32x4_t b)
+vandq_u32_safe(uint32x4_t a, uint32x4_t b)
 {
-        return vandq_u32(a, b);
+return vandq_u32(a, b);
 }
 
 static inline uint32x4_t
@@ -174,19 +174,19 @@ sbox4_anf_u32x4(uint32x4_t a0, uint32x4_t a1, uint32x4_t a2, uint32x4_t a3,
         uint32x4_t m0 = one;
         uint32x4_t m1 = a0;
         uint32x4_t m2 = a1;
-        uint32x4_t m3 = vand_u32(a0, a1);
-        uint32x4_t m4 = a2;
-        uint32x4_t m5 = vand_u32(a0, a2);
-        uint32x4_t m6 = vand_u32(a1, a2);
-        uint32x4_t m7 = vand_u32(m3, a2);
-        uint32x4_t m8 = a3;
-        uint32x4_t m9 = vand_u32(a0, a3);
-        uint32x4_t m10 = vand_u32(a1, a3);
-        uint32x4_t m11 = vand_u32(m3, a3);
-        uint32x4_t m12 = vand_u32(a2, a3);
-        uint32x4_t m13 = vand_u32(m5, a3);
-        uint32x4_t m14 = vand_u32(m6, a3);
-        uint32x4_t m15 = vand_u32(m7, a3);
+uint32x4_t m3 = vandq_u32_safe(a0, a1);
+uint32x4_t m4 = a2;
+uint32x4_t m5 = vandq_u32_safe(a0, a2);
+uint32x4_t m6 = vandq_u32_safe(a1, a2);
+uint32x4_t m7 = vandq_u32_safe(m3, a2);
+uint32x4_t m8 = a3;
+uint32x4_t m9 = vandq_u32_safe(a0, a3);
+uint32x4_t m10 = vandq_u32_safe(a1, a3);
+uint32x4_t m11 = vandq_u32_safe(m3, a3);
+uint32x4_t m12 = vandq_u32_safe(a2, a3);
+uint32x4_t m13 = vandq_u32_safe(m5, a3);
+uint32x4_t m14 = vandq_u32_safe(m6, a3);
+uint32x4_t m15 = vandq_u32_safe(m7, a3);
 
         uint32x4_t const monomials[16] = {
                 m0, m1, m2, m3, m4, m5, m6, m7,
@@ -234,12 +234,12 @@ f_anf4(uint32x4_t x)
         uint32x4_t const one = vdupq_n_u32(1);
         uint32x4_t r = vdupq_n_u32(0);
 
-        for (int p = 0; p < 8; ++p) {
-                int base = 4 * p;
-                uint32x4_t a0 = vand_u32(vshrq_n_u32(x, base + 0), one);
-                uint32x4_t a1 = vand_u32(vshrq_n_u32(x, base + 1), one);
-                uint32x4_t a2 = vand_u32(vshrq_n_u32(x, base + 2), one);
-                uint32x4_t a3 = vand_u32(vshrq_n_u32(x, base + 3), one);
+for (int p = 0; p < 8; ++p) {
+int base = 4 * p;
+uint32x4_t a0 = vandq_u32_safe(vshrq_n_u32(x, base + 0), one);
+uint32x4_t a1 = vandq_u32_safe(vshrq_n_u32(x, base + 1), one);
+uint32x4_t a2 = vandq_u32_safe(vshrq_n_u32(x, base + 2), one);
+uint32x4_t a3 = vandq_u32_safe(vshrq_n_u32(x, base + 3), one);
 
                 uint32x4_t y0, y1, y2, y3;
                 sbox4_anf_u32x4(a0, a1, a2, a3, sbox_anf[p], &y0, &y1, &y2,

@@ -21,8 +21,16 @@ test: all
 clean:
 	rm -f $(target) *.o
 
-# Build optimized for Cortex-A9 with NEON enabled
+# Build optimized for Cortex-A9 with NEON enabled when an ARM toolchain is used
+cc_is_arm := $(findstring arm,$(shell $(CC) -dumpmachine))
+
+ifeq ($(cc_is_arm),)
+cortex-a9-neon:
+	@echo "CC ($(CC)) does not target ARM; override CC=arm-linux-gnueabihf-gcc (or similar) to build for Cortex-A9/NEON."
+	$(MAKE) $(target)
+else
 cortex-a9-neon: CFLAGS += -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
 cortex-a9-neon: $(target)
+endif
 
 .PHONY: all clean format test cortex-a9-neon
